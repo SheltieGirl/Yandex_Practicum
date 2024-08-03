@@ -1,1 +1,24 @@
 Project on SQL
+
+1 Find the number of questions that have scored more than 300 points or have been added to "Favorites" at least 100 times.
+SELECT COUNT(id)
+FROM stackoverflow.posts
+WHERE post_type_id=1 
+   AND (score>300 OR favorites_count >= 100)
+GROUP BY post_type_id;
+
+2 How many questions were asked on average per day from November 1 to November 18, 2008, inclusive? Round the result to a whole number.
+WITH count_post AS (SELECT COUNT(id) AS count_id, creation_date::date
+FROM stackoverflow.posts
+WHERE post_type_id=1 
+GROUP BY creation_date::date
+HAVING creation_date::date BETWEEN '2008-11-01' AND '2008-11-18')
+
+SELECT ROUND(AVG(count_id),0)
+FROM count_post
+
+3 How many users received badges on the same day they registered? Display the number of unique users.
+SELECT COUNT(DISTINCT u.id)
+FROM stackoverflow.badges b
+JOIN stackoverflow.users u on u.id = b.user_id
+WHERE u.creation_date::date = b.creation_date::date
