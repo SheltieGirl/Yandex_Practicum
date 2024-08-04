@@ -193,24 +193,105 @@ GROUP BY DATE_TRUNC('month', creation_date)::date
 ORDER BY SUM(views_count) DESC
 
 
-15
+15 Print the names of the most active users who gave more than 100 answers in the first month after registration (including the day of registration). 
+Do not take into account the questions asked by users. 
+For each user name print the number of unique user_id values. 
+Sort the result by the field with names in lexicographic order.
+SELECT u.display_name, COUNT(DISTINCT p.user_id) AS unique_id
+FROM stackoverflow.posts p
+JOIN stackoverflow.users u On p.user_id = u.id
+JOIN stackoverflow.post_types pt ON pt.id = p.post_type_id
+WHERE p.creation_date::date BETWEEN u.creation_date::date AND (u.creation_date::date + INTERVAL '1 month') AND pt.type LIKE '%Answer%'
+GROUP BY display_name
+HAVING COUNT(p.id) > 100
+ORDER BY display_name
 
 
-16
+16 Output the number of posts for 2008 by month. Select posts from users who registered in September 2008 and made at least one post in December of the same year. 
+Sort the table by descending month value.
+WITH profile AS (SELECT u.id
+                 FROM stackoverflow.users u
+                 JOIN stackoverflow.posts p ON p.user_id = u.id
+                 WHERE DATE_TRUNC('month', u.creation_date)::date = '2008-09-01'
+                 AND DATE_TRUNC('month', p.creation_date)::date = '2008-12-01'
+                 )
+
+SELECT COUNT(p.id), DATE_TRUNC('month', p.creation_date)::date
+FROM stackoverflow.posts p
+WHERE p.user_id IN (SELECT * FROM profile) AND DATE_TRUNC('year', p.creation_date)::date = '2008-01-01'
+GROUP BY DATE_TRUNC('month', p.creation_date)::date
+ORDER BY DATE_TRUNC('month', p.creation_date)::date DESC
 
 
-17
+17 Using the post data, output several fields:
+-identifier of the user who wrote the post;
+-date of post creation;
+-the number of views of the current post;
+-sum of views of the author's posts with accumulation.
+The data in the table should be sorted by ascending order of user IDs, and data about the same user - by ascending order of post creation date.
+SELECT user_id, 
+creation_date,
+views_count, 
+SUM(views_count) OVER(PARTITION BY user_id ORDER BY creation_date)
+FROM stackoverflow.posts
 
 
-18
+18 On average, how many days between 1 and 7 December 2008, inclusive, did users interact with the platform? 
+For each user, select the days on which he or she published at least one post. 
+You need to get a single integer - don't forget to round the result.
+SELECT ROUND(AVG(dt.count_day))
+FROM (SELECT user_id,
+      COUNT(DISTINCT creation_date::date) AS count_day
+      FROM stackoverflow.posts
+      WHERE creation_date::date BETWEEN '2008-12-01' AND '2008-12-07' 
+      GROUP BY user_id
+) AS dt
 
 
-19
+19 By how much percent did the number of posts change each month from 1 September to 31 December 2008? Display a table with the following fields:
+-Month number.
+-Number of posts for the month.
+-Percentage, which shows how much the number of posts in the current month has changed from the previous month.
+If there are fewer posts, the percentage value should be negative, if there are more posts, the percentage value should be positive. 
+Round the percentage value to two decimal places.
+Recall that when dividing one integer by another in PostgreSQL, the result will be an integer rounded down to the nearest integer. 
+To avoid this, convert the divisor to the numeric type.
+WITH post_count AS (SELECT
+                   EXTRACT(MONTH from creation_date::date) AS month,
+                    COUNT(id) as post_counts
+                   FROM stackoverflow.posts
+                   WHERE creation_date BETWEEN '2008-09-01' AND '2008-12-31'
+                   GROUP BY month
+                   )
+                   
+SELECT *,
+ROUND(((post_counts::numeric / LAG(post_counts) OVER (ORDER BY month)) - 1) * 100,2) AS user_growth
+FROM post_count
 
 
-20
-
-
+20 Find the user who has published the most posts since registration. Print his activity data for October 2008 in this form:
+-week number;
+-date and time of the last post published this week.
+WITH profile AS (SELECT
+                user_id,
+                COUNT(DISTINCT id) AS cnt
+                FROM stackoverflow.posts
+                 GROUP BY user_id
+                 ORDER BY cnt DESC
+                 LIMIT 1
+                ),
+week_post AS (SELECT
+             p.user_id,
+             p.creation_date,
+             EXTRACT('WEEK' from p.creation_date) as week_day
+             FROM stackoverflow.posts p
+             JOIN profile pf ON p.user_id = pf.user_id
+             WHERE DATE_TRUNC('month', p.creation_date)::date = '2008-10-01'
+             )
+SELECT DISTINCT week_day::numeric,    
+MAX(creation_date) OVER (PARTITION BY week_day)
+FROM week_post
+ORDER BY week_day
 
 
 
