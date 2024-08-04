@@ -1,13 +1,14 @@
 Project on SQL
 
-1 Find the number of questions that have scored more than 300 points or have been added to "Favorites" at least 100 times.
+① Find the number of questions that have scored more than 300 points or have been added to "Favorites" at least 100 times.
 SELECT COUNT(id)
 FROM stackoverflow.posts
 WHERE post_type_id=1 
    AND (score>300 OR favorites_count >= 100)
 GROUP BY post_type_id;
 
-2 How many questions were asked on average per day from November 1 to November 18, 2008, inclusive? Round the result to a whole number.
+
+② How many questions were asked on average per day from November 1 to November 18, 2008, inclusive? Round the result to a whole number.
 WITH count_post AS (SELECT COUNT(id) AS count_id, creation_date::date
 FROM stackoverflow.posts
 WHERE post_type_id=1 
@@ -17,8 +18,204 @@ HAVING creation_date::date BETWEEN '2008-11-01' AND '2008-11-18')
 SELECT ROUND(AVG(count_id),0)
 FROM count_post
 
-3 How many users received badges on the same day they registered? Display the number of unique users.
+
+③ How many users received badges on the same day they registered? Display the number of unique users.
 SELECT COUNT(DISTINCT u.id)
 FROM stackoverflow.badges b
 JOIN stackoverflow.users u on u.id = b.user_id
 WHERE u.creation_date::date = b.creation_date::date
+
+
+④ How many unique posts by a user named Joel Coehoorn have received at least one vote?
+SELECT COUNT(DISTINCT(p.id))
+FROM stackoverflow.posts p
+JOIN stackoverflow.users u ON p.user_id = u.id
+JOIN stackoverflow.votes v ON p.id = v.post_id
+WHERE u.display_name LIKE 'Joel Coehoorn' AND v.id >=1
+
+
+⑤ Unload all fields of the table vote_types. Add the rank field to the table, which will contain the numbers of records in reverse order. 
+The table should be sorted by the id field.
+SELECT *, ROW_NUMBER() OVER (ORDER BY id DESC)
+FROM stackoverflow.vote_types
+ORDER BY id
+
+
+⑥ Select the 10 users who put the most votes of type Close. Display a table with two fields: user ID and number of votes. 
+Sort the data first by descending number of votes, then by descending value of the user ID.
+WITH vote_types_close AS (SELECT *
+                          FROM stackoverflow.vote_types
+                          WHERE name = 'Close'
+                          LIMIT 10)
+                          
+                          
+SELECT v.user_id, COUNT(tc.id) AS vote_count
+FROM stackoverflow.votes v
+JOIN vote_types_close tc ON v.vote_type_id = tc.id
+GROUP BY v.user_id
+ORDER BY vote_count DESC, v.user_id DESC
+LIMIT 10
+
+
+⑦Select 10 users based on the number of badges received between 15 November and 15 December 2008 inclusive.
+Display several fields:
+-user id;
+-number of badges;
+-place in the rating - the more badges, the higher the rating.
+Assign the same ranking to users who have the same number of badges.
+Sort the records by the number of badges in descending order and then in ascending order of the User ID value.
+WITH profile AS (SELECT user_id, COUNT(id) AS b_count
+FROM stackoverflow.badges
+WHERE creation_date::date BETWEEN '2008-11-15' AND '2008-12-15'
+GROUP BY user_id
+ORDER BY b_count DESC, user_id
+LIMIT 10)
+
+SELECT *, 
+      DENSE_RANK() OVER (ORDER BY B_count DESC) AS rank
+FROM profile
+
+
+⑧How many points does each user's post get on average?
+Generate a table of the following fields:
+-post title;
+-user ID;
+-number of points for the post;
+-Average number of points per post, rounded up to a whole number.
+Do not include posts without a title or that have scored zero points.
+SELECT 
+    title, 
+    user_id, 
+    score,
+    ROUND(AVG(score) OVER (PARTITION BY user_id), 0) AS avg_score
+FROM 
+    stackoverflow.posts
+WHERE 
+    title IS NOT NULL 
+    AND score <> 0;
+
+⑨ Display the titles of posts that have been written by users who have received more than 1000 badges.
+Posts without titles should not be listed.
+SELECT title
+FROM  stackoverflow.posts
+WHERE user_id IN (SELECT user_id
+               FROM stackoverflow.badges
+               GROUP BY user_id
+               HAVING COUNT(id) >1000)
+AND title IS NOT NULL
+
+
+⑩Write a query that will dump data about users from Canada. Divide users into three groups depending on the number of views on their profiles:
+-Users with more than or equal to 350 views should be assigned to group 1;
+-users with the number of views less than 350 but more than or equal to 100 - group 2;
+- users with the number of views less than 100 - group 3.
+Display the user ID, number of profile views and group in the summary table. 
+Users with the number of views less than or equal to zero should not be included in the summary table.
+SELECT id, views, 
+    CASE WHEN views >=350 THEN 1
+    WHEN views<100 THEN 3
+          ELSE 2
+       END AS group
+FROM stackoverflow.users
+WHERE location LIKE '%Canada%' AND views >=1
+
+
+11 Complete the previous query. Display the leaders of each group - users who have accumulated the maximum number of views in their group. 
+Display the fields with the user ID, group and number of views. 
+Sort the table in descending order of views and then in ascending order of ID value.
+WITH c_tab AS (
+    SELECT id, views AS profile_views, 
+        CASE 
+            WHEN views >= 350 THEN 1
+            WHEN views < 100 THEN 3
+            ELSE 2
+        END AS group_views
+    FROM stackoverflow.users
+    WHERE location LIKE '%Canada%' AND views >= 1
+),
+max_tab AS (
+    SELECT *, 
+           MAX(profile_views) OVER (PARTITION BY group_views) AS rank
+    FROM c_tab
+)
+SELECT 
+    id,
+    profile_views,
+    group_views
+FROM max_tab
+WHERE profile_views = rank
+ORDER BY profile_views DESC, id;
+
+
+12 Calculate the daily growth of new users in November 2008. Generate a table with the fields:
+-day number;
+-number of users registered on this day;
+-the sum of users with accumulation.
+WITH user_nov AS (
+    SELECT 
+        EXTRACT(DAY FROM creation_date::date) AS day_number,
+        COUNT(id) AS user_count
+    FROM 
+        stackoverflow.users
+    WHERE 
+        creation_date::date BETWEEN '2008-11-01' AND '2008-11-30'
+    GROUP BY 
+        EXTRACT(DAY FROM creation_date::date)
+)
+SELECT 
+    day_number,
+    user_count,
+    SUM(user_count) OVER (ORDER BY day_number) AS cumulative_user_count
+FROM 
+    user_nov
+ORDER BY 
+    day_number;
+
+
+13 For each user who has written at least one post, find the interval between registration and the time the first post was created. Display:
+-user id;
+-the time difference between registration and the first post.
+WITH profile AS (SELECT DISTINCT user_id AS unique_user, 
+                 MIN(creation_date) OVER (PARTITION BY user_id) AS creation_day
+                 FROM stackoverflow.posts)
+SELECT p.unique_user,
+p.creation_day - u.creation_date AS difference
+FROM stackoverflow.users AS u 
+JOIN profile p ON  u.id = p.unique_user;
+
+
+14 Output the total sum of views for the posts published in each month of 2008. 
+If there is no data for any month in the database, this month can be skipped. 
+Sort the result in descending order of the total number of views.
+SELECT DATE_TRUNC('month', creation_date)::date AS mnth, SUM(views_count)
+FROM stackoverflow.posts
+GROUP BY DATE_TRUNC('month', creation_date)::date
+ORDER BY SUM(views_count) DESC
+
+
+15
+
+
+16
+
+
+17
+
+
+18
+
+
+19
+
+
+20
+
+
+
+
+
+
+
+
+
+
