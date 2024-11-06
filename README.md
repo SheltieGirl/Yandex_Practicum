@@ -1,2 +1,2 @@
 # Yandex_Practicum
-My cases/protects from study
+My cases/protects from study SQL
